@@ -1,0 +1,127 @@
+---
+title: "Vegation Recovery Rate Zonification In PR"
+author: 
+  - "Israel O. Dilán-Pantojas"
+  - "Marcelo Francia-Hinostroza"
+  - "Manuel J. La Torre-Poueymirou"
+date: "April 9, 2019"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: 
+    highlight: pygments
+---
+
+```{r global_options, message=TRUE, warning=TRUE, include=FALSE, paged.print=TRUE}
+knitr::opts_chunk$set(echo = T)
+```
+## Methods: 
+
+## References:
+
+
+\pagebreak
+
+## Apendix:
+```{r loading_libraries, message=FALSE, warning=FALSE, paged.print=FALSE}
+library(ncdf4) # package for netcdf manipulation
+library(raster) # package for raster manipulation
+library(rgdal) # package for geospatial analysis
+library(ggplot2) # packages for plotting
+library(chron) 
+library(lattice)
+library(RColorBrewer)
+```
+
+```{r loading_data}
+# load data
+setwd("~/Desktop/BigData2Biol/Project/")
+data <- nc_open("MOD13Q1.006_250m_aid0001.nc")
+
+# get longitude and latitude
+lon <- ncvar_get(data, "lon")
+nlon <- dim(lon)
+lat <- ncvar_get(data, "lat")
+nlat <- dim(lat)
+
+# get time dimension
+time <- ncvar_get(data, "time")
+tunits <- ncatt_get(data,"time","units")
+nt <- dim(time)
+
+# get ndvi
+dname <- "_250m_16_days_NDVI"
+ndvi_array <- ncvar_get(data,dname)
+dlname <- ncatt_get(data,dname,"long_name")
+dunits <- ncatt_get(data,dname,"units")
+fillvalue <- ncatt_get(data,dname,"_FillValue")
+
+# get global attributes
+title <- ncatt_get(data,0,"title")
+institution <- ncatt_get(data,0,"institution")
+datasource <- ncatt_get(data,0,"source")
+references <- ncatt_get(data,0,"references")
+history <- ncatt_get(data,0,"history")
+Conventions <- ncatt_get(data,0,"Conventions")
+
+nc_close(data)
+
+# convert time -- split the time units string into fields
+tustr <- strsplit(tunits$value, " ")
+tdstr <- strsplit(unlist(tustr)[3], "-")
+tmonth <- as.integer(unlist(tdstr)[2])
+tday <- as.integer(unlist(tdstr)[3])
+tyear <- as.integer(unlist(tdstr)[1])
+
+# replace netCDF fill values with NA's
+ndvi_array[ndvi_array==fillvalue$value] <- NA
+NDVIS <- ndvi_array
+
+# identify selected dates
+dates <- chron(time,origin=c(tmonth, tday, tyear))
+```
+
+```{r vegetation_recovery}
+# create vegetation recovery rate function
+VRR <- function(NDVI1,NDVI2,NDVI3) {
+  return ((NDVI3 - NDVI2)/ (NDVI1 - NDVI2))
+}
+```
+
+```{r }
+
+v = dim(NDVIS)
+v[3] = v[3] -2
+w <- array(data=NA, dim = v)
+
+i_array <- seq(2,(v[3]))
+
+w <- sapply(i_array,  function(i) {VRR(NDVIS[,,i-1], NDVIS[,,i], NDVIS[,,i+1])},simplify = "array")
+
+# # use colorbrewer which loads with the rasterVis package to generate
+# # a color ramp of yellow to green
+cols <- colorRampPalette(brewer.pal(9,"YlGn"))
+# # create a level plot - plot
+levelplot(w,  main="Landsat NDVI\nNEON El Yunque Forest", col.regions=cols)
+
+# generate raterizations and histograms
+par(mfrow=c(3, 2), mar=c(1,3,3,1), oma=c(1,1,4,1))
+for (m in i_array) {
+  # get specific time slice
+  ndvi_slice <- w[,,m]
+  # create rasterization
+  r <- raster(ndvi_slice, xmn=min(lon), xmx=max(lon), ymn=min(lat), ymx=max(lat), crs=CRS(proj))
+  # #  cex=2, cex.lab = 2, cex.axis = 2, cex.main = 2.4
+  plot(r, xlab ="Longitude", ylab = "Latitude", main = paste("Rast", dates2[m], ",", dates2[m+1], ", and", dates2[m+2], sep = " "))
+
+  # turn off scientific notation
+  options("scipen" = 100, "digits" = 4)
+  # plot histogram of ndvi
+  hist(ndvi_slice, col = "springgreen", xlab = "NDVI Value", main = paste("histograms ", dates2[m], ",", dates2[m+1], ", and", dates2[m+2], sep = " "))
+
+}
+# mtext( "MODIS reported NDVI analysis", outer = TRUE, cex=2, cex.main = 1.5)
+# dev.copy(png,'multiple_raster.png', height = 2.8*480, width = 2.2*480)
+# dev.off()
+
+```
