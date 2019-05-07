@@ -45,6 +45,8 @@ library(chron)
 setwd("~/Desktop/BigData2Biol/Project_2/Hot_zones")
 data <- nc_open(filename = "MOD13Q1.006_250m_aid0001.nc")
 
+n <- names(data$var)
+
 # get longitude and latitude
 lon <- ncvar_get(data, "lon")
 nlon <- dim(lon)
@@ -57,20 +59,28 @@ tunits <- ncatt_get(data,"time","units")
 nt <- dim(time)
 
 # get ndvi
-dname <- "_250m_16_days_NDVI"
+dname <- n[2]
 ndvi_array <- ncvar_get(data,dname)
 dlname <- ncatt_get(data,dname,"long_name")
 dunits <- ncatt_get(data,dname,"units")
 fillvalue <- ncatt_get(data,dname,"_FillValue")
 
-# get LST
-# dname <- "_LST"
+# get Quality
+# dname2 <- n[6]
+# qual_array <- ncvar_get(data,dname2)
+# dlname2 <- ncatt_get(data,dname2,"long_name")
+# dunits2 <- ncatt_get(data,dname2,"units")
+# fillvalue2 <- ncatt_get(data,dname2,"_FillValue")
+
+
+# # get LST
+# dname <- n[]
 # ndvi_array <- ncvar_get(data,dname)
 # dlname <- ncatt_get(data,dname,"long_name")
 # dunits <- ncatt_get(data,dname,"units")
 # fillvalue <- ncatt_get(data,dname,"_FillValue")
-
-# get evapo
+# 
+# # get evapo
 # dname <- "_EVAP"
 # ndvi_array <- ncvar_get(data,dname)
 # dlname <- ncatt_get(data,dname,"long_name")
@@ -96,7 +106,7 @@ tyear <- as.integer(unlist(tdstr)[1])
 
 # replace netCDF fill values with NA's
 # ndvi_array[ndvi_array==fillvalue$value] <- NA
-NDVIS <- ndvi_array
+# NDVIS <- ndvi_array
 
 # identify selected dates
 dates <- chron(time,origin=c(tmonth, tday, tyear))
@@ -112,57 +122,42 @@ dates <- chron(time,origin=c(tmonth, tday, tyear))
 
 c <- raster('MOD13Q1.006_250m_aid0001.nc')
 s <- stack(c)
-plot(s)
+levelplot(mean(s), main="All bands")
+
+zonal(c, 'mean')
+
+cellStats(s, mean)
+
+ndvi <- stack('MOD13Q1.006_250m_aid0001.nc', varname = "_250m_16_days_NDVI")
+lst <- stack('MOD13Q1.006_250m_aid0001.nc', varname = "_250m_16_days_NDVI")
+evap <- stack('MOD13Q1.006_250m_aid0001.nc', varname = "_250m_16_days_NDVI")
+
+
+avg_ndvi <- cellStats(ndvi,mean)
+
+# convert output array to data.frame
+avg_NDVI_HARV <- as.data.frame(avg_NDVI_HARV)
+
 
 # use colorbrewer which loads with the rasterVis package to generate
 # a color ramp of yellow to green
 cols <- colorRampPalette(brewer.pal(9,"YlGn"))
 # create a level plot - plot
 
-levelplot(s, main="Landsat NDVI -- Improved Colors \nNEON Harvard Forest Field Site", col.regions=cols)
-
-
 # https://www.neonscience.org/raster-time-series
 
-# plot NDVI
-# avg_NDVI_HARV <- as.data.frame(cellStats(s,mean))
-# 
-# names(avg_NDVI_HARV) <- "meanNDVI"
-# avg_NDVI_HARV$site <- "Yunque"
-# 
-# julianDays <- gsub("X|_HARV_NDVI_crop", "", row.names(avg_NDVI_HARV))
-# 
-# avg_NDVI_HARV$julianDay <- julianDays
-# 
-# ggplot(avg_NDVI_HARV, aes(julianDay, meanNDVI), na.rm=TRUE) +
-#   geom_point(size=4,colour = "PeachPuff4") + 
-#   ggtitle("Landsat Derived NDVI - 2011\n NEON Harvard Forest Field Site") +
-#   xlab("Julian Days") + ylab("Mean NDVI") +
-#   theme(text = element_text(size=20))
-# 
-# # map the data
-# world.outlines <- map("world" , plot=T)
-# world.outlines.sp <- map2SpatialLines(world.outlines, proj4string = CRS("+proj=longlat"))
-# 
-# mapTheme <- rasterTheme(region = rev(brewer.pal(10, "RdBu")))
-# 
-# yunque <- (ggmap(get_map(location = c(nlon,nlat))))
-# yunque + plot(s)
-# 
-#  
-# plt <- levelplot(s, main="Landsat NDVI -- Improved Colors \nNEON Harvard Forest Field Site")
-# plt + layer(ggmap(get_map(location = c(nlon,nlat))))
 
-png("zonification_plot.png")
+
+# png("zonification_plot.png")
 # Stack plot for zones
-levelplot(s, main="Landsat NDVI stacked over time", col.regions = colorRampPalette(brewer.pal(10,"RdYlGn")))
-dev.off()
+levelplot(ndvi, main="Landsat NDVI stacked over time", col.regions = colorRampPalette(brewer.pal(10,"RdYlGn")))
+# dev.off()
 
 # Stack plot for temp
-levelplot(s, main="Landsat LST stacked over time", col.regions = colorRampPalette(brewer.pal(10,"RdYlBu")))
+levelplot(lst, main="Landsat LST stacked over time", col.regions = colorRampPalette(brewer.pal(10,"RdYlBu")))
 
 # Stack plot for evap
-levelplot(s, main="Landsat Evapo stacked over time", col.regions = colorRampPalette(brewer.pal(10,"BrBG")))
+levelplot(evap, main="Landsat Evapo stacked over time", col.regions = colorRampPalette(brewer.pal(10,"BrBG")))
 ```
 
 ```{r}
@@ -193,28 +188,5 @@ for (m in 1:length(dates)) {
 # dev.off()
 ```
 
-First, we will need to convert the entire 3d array of data to a raster brick. **Note, this step may take several minutes.**
-```{r rasterize_brick}
-r_brick <- brick(ndvi_array, xmn=min(lat), xmx=max(lat), ymn=min(lon), ymx=max(lon), crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
-# note that you may have to play around with the transpose (the t() function) and flip() before the data are oriented correctly. In this example, the netcdf file recorded latitude on the X and longitude on the Y, so both a transpose and a flip in the y direction were required.
-# r_brick <- flip(t(r_brick), direction='y')
-```
 
-Extract timeseries of data at the Toolik Lake study location from the raster brick using the 'extract()' function.
-```{r get_Toolik}
-# El yunque-ish 18.2724609375, -65.80810546875
-toolik_lon <- 18.2724609375
-toolik_lat <- -65.80810546875
-toolik_series <- extract(r_brick, SpatialPoints(cbind(toolik_lon,toolik_lat)), method ="simple")
-```
 
-This timeseries is in a simple vector indexed only by the raster layer ID, so let's put it in an easier-to-use dataframe form and then plot the timeseries.
-```{r plot_Toolik}
-toolik_df <- data.frame(year=dates, NDVI=t(toolik_series)) # save as a dataframe
-# plot and save
-ggplot(data=toolik_df, aes(x=year, y=NDVI, group=1)) +
-  geom_line() + # make this a line plot
-  ggtitle("Growing season NDVI at Toolik Lake Station") +     # Set title
-  theme_bw() # use the black and white theme
-# ggsave('GIMMS3g_Toolik.png')
-```
